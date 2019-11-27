@@ -97,10 +97,16 @@ jobs:
             inputs:
               sourceFolder: $(Build.SourcesDirectory)/artifacts/bin/testhost
               targetFolder: $(Build.ArtifactStagingDirectory)/artifacts/bin/testhost
+          
+          - task: CopyFiles@2
+            displayName: Prepare artifacts toolset folder to publish
+            inputs:
+              sourceFolder: $(Build.SourcesDirectory)/artifacts/toolset
+              targetFolder: $(Build.ArtifactStagingDirectory)/toolset
         
           - template: /eng/pipelines/common/upload-artifact-step.yml
             parameters:
-              rootFolder: $(Build.ArtifactStagingDirectory)/artifacts/bin
+              rootFolder: $(Build.ArtifactStagingDirectory)/artifacts
               includeRootFolder: true
               archiveType: $(archiveType)
               archiveExtension: $(archiveExtension)
