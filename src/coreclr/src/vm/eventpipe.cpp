@@ -20,6 +20,7 @@
 #include "eventtracebase.h"
 #include "sampleprofiler.h"
 #include "win32threadpool.h"
+#include "eventtracebase.h"
 #include "ceemain.h"
 
 #ifdef FEATURE_PAL
@@ -94,6 +95,45 @@ void EventPipe::Initialize()
 #endif
     }
 
+    LPWSTR xplatEventConfig = NULL;
+    CLRConfig::GetConfigValue(CLRConfig::INTERNAL_EventPipeStartupPipe, &xplatEventConfig);
+
+    if (xplatEventConfig != nullptr)
+    {
+        auto configuration = XplatEventLoggerConfiguration();
+        auto configToParse = xplatEventConfig;
+        static WCHAR comma = W(',');
+        int providerCnt = 0;
+
+        // Iterate through the config to see how many providers were specified
+        while (configToParse != nullptr)
+        {
+            auto end = wcschr(configToParse, comma);
+            providerCnt++;    
+            configToParse = end + 1;
+        }
+        /*
+        int i = 0;
+
+        // Iterate it again to actually parse the config and create instances of EventPipeProviderConfiguration
+        while (configToParse != nullptr)
+        {
+            auto end = wcschr(configToParse, comma);
+            configuration.Parse(configToParse);
+            providerConfigurations[i] = (void*) new EventPipeProviderConfiguration(
+                configuration.GetProviderName(),
+                configuration.GetEnabledKeywordsMask(),
+                configuration.GetLevel(),
+                NULL);
+            if (end == nullptr)
+            {
+                break;
+            }
+            configToParse = end + 1;
+            i++;
+        }
+        */
+    }
 
     {
         CrstHolder _crst(GetLock());
