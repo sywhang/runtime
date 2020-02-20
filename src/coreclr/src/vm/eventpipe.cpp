@@ -18,9 +18,11 @@
 #include "eventpipesession.h"
 #include "eventpipejsonfile.h"
 #include "eventtracebase.h"
+#include "eventtracebase.h"
 #include "sampleprofiler.h"
 #include "win32threadpool.h"
 #include "ceemain.h"
+#include "configuration.h"
 
 #ifdef TARGET_UNIX
 #include "pal.h"
@@ -94,11 +96,110 @@ void EventPipe::Initialize()
 #endif
     }
 
-
     {
         CrstHolder _crst(GetLock());
         if (tracingInitialized)
             s_state = EventPipeState::Initialized;
+    }
+    EnableViaEnvironmentVariables();
+}
+
+//
+// If EventPipe environment variables are specified, parse them and start a session
+// 
+void EventPipe::EnableViaEnvironmentVariables()
+{
+    STANDARD_VM_CONTRACT;
+    if (CLRConfig::GetConfigValue(CLRConfig::INTERNAL_EnableEventPipe) != 0)
+    {
+        LPWSTR eventpipeConfig = NULL;
+        CLRConfig::GetConfigValue(CLRConfig::INTERNAL_EventPipeConfig, &eventpipeConfig);
+        LPCWSTR eventpipeOutputPath = Configuration::GetKnobStringValue(W("EventPipeOutputPath"));
+        uint32_t eventpipeCircularBufferMB = CLRConfig::GetConfigValue(CLRConfig::INTERNAL_EventPipeCircularMB);
+
+        if (eventpipeOutputPath == NULL)
+        {
+            eventpipeOutputPath = W("trace.nettrace");
+        }
+        auto configuration = XplatEventLoggerConfiguration();
+        LPWSTR configToParse = eventpipeConfig;
+        int providerCnt = 0;
+
+        // Create EventPipeProviderConfiguration and start tracing.
+        EventPipeProviderConfiguration* pProviders = nullptr;
+
+        // If COMPlus_EnableEventPipe is set to 1 but no configuration was specified, enable EventPipe session
+        // with the default provider configurations.
+        if (configToParse == nullptr || *configToParse == L'\0')
+        {
+            providerCnt = 2;
+            pProviders = new EventPipeProviderConfiguration[providerCnt];
+            pProviders[0] = EventPipeProviderConfiguration(W("Microsoft-Windows-DotNETRuntime"), 0x4c14fccbd, 5, nullptr);
+            pProviders[1] = EventPipeProviderConfiguration(W("Microsoft-Windows-DotNETRuntimePrivate"), 0x4002000b, 5, nullptr);
+        }
+        else
+        {
+            // Count how many providers there are to parse
+            static WCHAR comma = W(',');
+            while (*configToParse != '\0')
+            {
+                providerCnt += 1;
+                auto end = wcschr(configToParse, comma);
+                if (end == nullptr)
+                {
+                    break;
+                }
+                configToParse = end + 1;
+            }
+            configToParse = eventpipeConfig;
+            pProviders = new EventPipeProviderConfiguration[providerCnt];
+            int i = 0;
+            while (*configToParse != '\0')
+            {
+                auto end = wcschr(configToParse, comma);
+                configuration.Parse(configToParse);
+
+                // SampleProfiler can't be enabled on startup yet.
+                if (wcscmp(W("Microsoft-DotNETCore-SampleProfiler"), configuration.GetProviderName()) == 0)
+                {
+                    providerCnt -= 1;
+                }
+                else if (!configuration.IsValid()) // if we find any invalid configuration, do not trace.
+                {
+                    return;
+                }
+                else
+                {
+                    pProviders[i++] = EventPipeProviderConfiguration(
+                        configuration.GetProviderName(),
+                        configuration.GetEnabledKeywordsMask(),
+                        configuration.GetLevel(),
+                        configuration.GetArgument()
+                    );
+                }
+
+                if (end == nullptr)
+                {
+                    break;
+                }
+                configToParse = end + 1;
+            }
+        }
+
+        if (providerCnt != 0)
+        {
+            uint64_t sessionID = EventPipe::Enable(
+                eventpipeOutputPath,
+                eventpipeCircularBufferMB,
+                pProviders,
+                providerCnt,
+                EventPipeSessionType::File,
+                EventPipeSerializationFormat::NetTraceV4,
+                true,
+                nullptr
+            );
+            EventPipe::StartStreaming(sessionID);
+        }
     }
 }
 
