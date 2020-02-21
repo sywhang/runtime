@@ -40,6 +40,7 @@ Volatile<uint64_t> EventPipe::s_allowWrite = 0;
 unsigned int * EventPipe::s_pProcGroupOffsets = nullptr;
 #endif
 Volatile<uint32_t> EventPipe::s_numberOfSessions(0);
+bool EventPipe::s_enableSampleProfilerAtStartup = false;
 
 // This function is auto-generated from /src/scripts/genEventPipe.py
 #ifdef TARGET_UNIX
@@ -104,6 +105,17 @@ void EventPipe::Initialize()
     EnableViaEnvironmentVariables();
 }
 
+// Finish setting up the rest of EventPipe.
+void EventPipe::FinishSetup()
+{
+    STANDARD_VM_CONTRACT;
+
+    if (s_enableSampleProfilerAtStartup)
+    {
+        SampleProfiler::Enable();
+    }
+}
+
 //
 // If EventPipe environment variables are specified, parse them and start a session
 // 
@@ -132,10 +144,12 @@ void EventPipe::EnableViaEnvironmentVariables()
         // with the default provider configurations.
         if (configToParse == nullptr || *configToParse == L'\0')
         {
-            providerCnt = 2;
+            providerCnt = 3;
             pProviders = new EventPipeProviderConfiguration[providerCnt];
             pProviders[0] = EventPipeProviderConfiguration(W("Microsoft-Windows-DotNETRuntime"), 0x4c14fccbd, 5, nullptr);
             pProviders[1] = EventPipeProviderConfiguration(W("Microsoft-Windows-DotNETRuntimePrivate"), 0x4002000b, 5, nullptr);
+            pProviders[2] = EventPipeProviderConfiguration(W("Microsoft-DotNETCore-SampleProfiler"), 0x0, 5, nullptr);
+            s_enableSampleProfilerAtStartup = true;
         }
         else
         {
@@ -159,10 +173,9 @@ void EventPipe::EnableViaEnvironmentVariables()
                 auto end = wcschr(configToParse, comma);
                 configuration.Parse(configToParse);
 
-                // SampleProfiler can't be enabled on startup yet.
                 if (wcscmp(W("Microsoft-DotNETCore-SampleProfiler"), configuration.GetProviderName()) == 0)
                 {
-                    providerCnt -= 1;
+                    s_enableSampleProfilerAtStartup = true;
                 }
                 else if (!configuration.IsValid()) // if we find any invalid configuration, do not trace.
                 {
@@ -196,7 +209,8 @@ void EventPipe::EnableViaEnvironmentVariables()
                 EventPipeSessionType::File,
                 EventPipeSerializationFormat::NetTraceV4,
                 true,
-                nullptr
+                nullptr,
+                !s_enableSampleProfilerAtStartup
             );
             EventPipe::StartStreaming(sessionID);
         }
@@ -268,7 +282,8 @@ EventPipeSessionID EventPipe::Enable(
     EventPipeSessionType sessionType,
     EventPipeSerializationFormat format,
     const bool rundownRequested,
-    IpcStream *const pStream)
+    IpcStream *const pStream,
+    const bool enableSampleProfiler)
 {
     CONTRACTL
     {
@@ -307,7 +322,7 @@ EventPipeSessionID EventPipe::Enable(
             pProviders,
             numProviders);
 
-        const bool fSuccess = EnableInternal(pSession, pEventPipeProviderCallbackDataQueue);
+        const bool fSuccess = EnableInternal(pSession, pEventPipeProviderCallbackDataQueue, enableSampleProfiler);
         if (fSuccess)
             sessionId = reinterpret_cast<EventPipeSessionID>(pSession);
         else
@@ -319,7 +334,8 @@ EventPipeSessionID EventPipe::Enable(
 
 bool EventPipe::EnableInternal(
     EventPipeSession *const pSession,
-    EventPipeProviderCallbackDataQueue* pEventPipeProviderCallbackDataQueue)
+    EventPipeProviderCallbackDataQueue* pEventPipeProviderCallbackDataQueue,
+    const bool enableSampleProfiler)
 {
     CONTRACTL
     {
@@ -368,7 +384,10 @@ bool EventPipe::EnableInternal(
     s_config.Enable(*pSession, pEventPipeProviderCallbackDataQueue);
 
     // Enable the sample profiler
-    SampleProfiler::Enable(pEventPipeProviderCallbackDataQueue);
+    if (enableSampleProfiler)
+    {
+        SampleProfiler::Enable();
+    }
 
     return true;
 }
