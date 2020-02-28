@@ -314,6 +314,7 @@ set(VM_SOURCES_WKS
     custommarshalerinfo.cpp
     autotrace.cpp
     diagnosticserver.cpp
+    diagnosticsserverprotocolhelper.cpp
     dllimportcallback.cpp
     eeconfig.cpp
     eecontract.cpp
@@ -431,6 +432,7 @@ set(VM_HEADERS_WKS
     custommarshalerinfo.h
     autotrace.h
     diagnosticserver.h
+    diagnosticsserverprotocolhelper.h
     diagnosticsprotocol.h
     dllimportcallback.h
     eeconfig.h
