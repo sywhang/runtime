@@ -3472,7 +3472,6 @@ BOOL ETW::TypeSystemLog::AddTypeToGlobalCacheIfNotExists(TypeHandle th, BOOL * p
     CONTRACTL_END;
 
     BOOL fSucceeded = FALSE;
-
     {
         CrstHolder _crst(GetHashCrst());
 
@@ -3520,20 +3519,35 @@ BOOL ETW::TypeSystemLog::AddTypeToGlobalCacheIfNotExists(TypeHandle th, BOOL * p
             *pfCreatedNew = FALSE;
             return fSucceeded;
         }
-    }
 
-    fSucceeded = FALSE;
-    EX_TRY
-    {
-        CrstHolder _crst(GetHashCrst());
-        s_pAllLoggedTypes->allLoggedTypesHash.Add(pLoggedTypesFromModule);
-        fSucceeded = TRUE;
+        {
+            CrstHolder _crst(GetHashCrst());
+
+            // Check the dictionary again to see if the entry was added between we checked it above and now.
+            LoggedTypesFromModule * pLoggedTypesFromModuleRecheck = s_pAllLoggedTypes->allLoggedTypesHash.Lookup(pLoaderModule);
+            if (pLoggedTypesFromModuleRecheck == NULL)
+            {
+                // If not, add it to the cache.
+                EX_TRY
+                {
+                    s_pAllLoggedTypes->allLoggedTypesHash.Add(pLoggedTypesFromModule);
+                    fSucceeded = TRUE;
+                }
+                EX_CATCH
+                {
+                    fSucceeded = FALSE;
+                }
+                EX_END_CATCH(RethrowCorruptingExceptions);
+            }
+            else
+            {
+                // Otherwise, delete the newly created cache entry.
+                delete pLoggedTypesFromModule;
+                pLoggedTypesFromModule = pLoggedTypesFromModuleRecheck;
+                *pfCreatedNew = FALSE;
+            }
+        }
     }
-    EX_CATCH
-    {
-        fSucceeded = FALSE;
-    }
-    EX_END_CATCH(RethrowCorruptingExceptions);
     if (!fSucceeded)
     {
         *pfCreatedNew = FALSE;
@@ -3542,7 +3556,6 @@ BOOL ETW::TypeSystemLog::AddTypeToGlobalCacheIfNotExists(TypeHandle th, BOOL * p
 
     // Step 2: From hash of types, see if our TypeHandle is there already
     TypeLoggingInfo typeLoggingInfoPreexisting;
-
     {
         CrstHolder _crst(GetHashCrst());
         typeLoggingInfoPreexisting = pLoggedTypesFromModule->loggedTypesFromModuleHash.Lookup(th);
