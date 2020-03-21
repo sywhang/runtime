@@ -3576,7 +3576,18 @@ BOOL ETW::TypeSystemLog::AddTypeToGlobalCacheIfNotExists(TypeHandle th, BOOL * p
     EX_TRY
     {
         CrstHolder _crst(GetHashCrst());
-        pLoggedTypesFromModule->loggedTypesFromModuleHash.Add(typeLoggingInfoNew);
+        TypeLoggingInfo typeLoggingInfoPreexistingRecheck = pLoggedTypesFromModule->loggedTypesFromModuleHash.Lookup(th);
+        
+        // Recheck if this type has been logged between the last time we checked it and now.
+        if (typeLoggingInfoPreexistingRecheck.th.IsNull())
+        {
+            pLoggedTypesFromModule->loggedTypesFromModuleHash.Add(typeLoggingInfoNew);
+        }
+        else
+        {
+            // Something logged the type already. Do not add it to the cache.
+            *pfCreatedNew = FALSE;
+        }
         fSucceeded = TRUE;
     }
     EX_CATCH
@@ -3587,10 +3598,7 @@ BOOL ETW::TypeSystemLog::AddTypeToGlobalCacheIfNotExists(TypeHandle th, BOOL * p
     if (!fSucceeded)
     {
         *pfCreatedNew = FALSE;
-        return fSucceeded;
     }
-
-    *pfCreatedNew = TRUE;
     return fSucceeded;
 }
 
