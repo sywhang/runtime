@@ -40,6 +40,29 @@ enum EventPipeBufferState
     READ_ONLY = 1
 };
 
+
+// Helper class for allocating EventPipeBuffers.
+class EventPipeBufferAllocator
+{
+private:
+    BYTE* m_pBlockStart;
+    uint32_t osPageSize;
+    uint32_t * m_allocBitMap;
+    uint32_t m_pageCnt;
+
+public:
+    // Allocate a buffer
+    BYTE* Alloc();
+
+    // "Free" a buffer. This marks the internal buffer as available for use.
+    void Free(BYTE* pBuffer);
+
+public:
+
+    EventPipeBufferAllocator(size_t maxBufferSize);
+    ~EventPipeBufferAllocator();
+};
+
 class EventPipeBuffer
 {
 
@@ -128,7 +151,7 @@ private:
 
 public:
 
-    EventPipeBuffer(unsigned int bufferSize, EventPipeThread* pWriterThread, unsigned int eventSequenceNumber);
+    EventPipeBuffer(BYTE* buffer, EventPipeThread* pWriterThread, unsigned int eventSequenceNumber);
     ~EventPipeBuffer();
 
     // Write an event to the buffer.
@@ -162,6 +185,8 @@ public:
 
     // Convert the buffer writable to readable
     void ConvertToReadOnly();
+
+    BYTE* GetInternalBuffer();
 
 #ifdef _DEBUG
     bool EnsureConsistency();

@@ -11,7 +11,91 @@
 
 #ifdef FEATURE_PERFTRACING
 
-EventPipeBuffer::EventPipeBuffer(unsigned int bufferSize, EventPipeThread* pWriterThread, unsigned int eventSequenceNumber)
+EventPipeBufferAllocator::EventPipeBufferAllocator(size_t maxBufferSize)
+{
+    CONTRACTL
+    {
+        GC_NOTRIGGER;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    // First, find the OS page size
+    osPageSize = GetOsPageSize() * 25;
+
+    // mmap chunk of memory that fits within maxBufferSize and is multiple of OS page size
+    m_pageCnt = maxBufferSize / osPageSize;
+    m_pBlockStart = (BYTE*)ClrVirtualAlloc(NULL, osPageSize * m_pageCnt, MEM_COMMIT, PAGE_READWRITE);
+
+    // Array of integers whose bits are used to keep track of whether 
+    // nth buffer has been allocated.
+    // Basically the bit that indicates whether Nth buffer is free
+    // is logged in (N % 8)th bit of (m_allocBitMap[N/8])th integer.
+    m_allocBitMap = new uint32_t[m_pageCnt / 8];
+    memset(m_allocBitMap, 0, m_pageCnt / 8);
+}
+
+
+EventPipeBufferAllocator::~EventPipeBufferAllocator()
+{
+    // Free the mmap'd chunk of memory
+    ClrVirtualFree(m_pBlockStart, 0, MEM_RELEASE);
+
+    // Free the bitmap 
+    delete[] m_allocBitMap;
+}
+
+
+BYTE* EventPipeBufferAllocator::Alloc()
+{
+    // Find a free buffer
+    // TODO: Is this really faster...?
+    bool found = false;
+    int bufferIdx = -1;
+    for (int i = 0; i < m_pageCnt; i++)
+    {
+        // Check if there is a free page
+        if (m_allocBitMap[i] ^ 0xFFFFFFFF)
+        {
+            // TODO: there's GOTTA be faster way to do this but it's 4am 
+            // and my brain is feeling jelly....
+            for (int j = 0; j < 8; j++)
+            {
+                if (!(m_allocBitMap[i] & (1 << j)))
+                {
+                    bufferIdx = (i << 3) + j;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    if (bufferIdx == -1)
+    {
+        return nullptr;
+    }
+    else
+    {
+        // memset the new buffer and return it.
+        BYTE * newBuffer = m_pBlockStart + (bufferIdx * osPageSize);
+        memset(newBuffer, 0, osPageSize);
+
+        return newBuffer;
+    }
+}
+
+void EventPipeBufferAllocator::Free(BYTE * pBuffer)
+{
+    // calculate the index with the offset
+    int bufferIdx = (pBuffer - m_pBlockStart) / osPageSize;
+
+    // set the correct bit to 0 in the bitmap
+    m_allocBitMap[bufferIdx / 8] &= ~(1 << bufferIdx % 8);
+}
+
+
+EventPipeBuffer::EventPipeBuffer(BYTE * buffer, EventPipeThread* pWriterThread, unsigned int eventSequenceNumber)
 {
     CONTRACTL
     {
@@ -21,10 +105,11 @@ EventPipeBuffer::EventPipeBuffer(unsigned int bufferSize, EventPipeThread* pWrit
     }
     CONTRACTL_END;
     m_state = EventPipeBufferState::WRITABLE;
+
+    unsigned int bufferSize = GetOsPageSize() * 25;
     m_pWriterThread = pWriterThread;
     m_eventSequenceNumber = eventSequenceNumber;
-    m_pBuffer = ClrVirtualAlloc(NULL, bufferSize, MEM_COMMIT, PAGE_READWRITE);
-    memset(m_pBuffer, 0, bufferSize);
+    m_pBuffer = buffer;
     m_pLimit = m_pBuffer + bufferSize;
     m_pCurrent = GetNextAlignedAddress(m_pBuffer);
 
@@ -45,9 +130,20 @@ EventPipeBuffer::~EventPipeBuffer()
         // We should never be deleting a buffer that a writer thread might still try to write to
         PRECONDITION(m_state == EventPipeBufferState::READ_ONLY);
     }
+    CONTRACTL_END; 
+}
+
+BYTE* EventPipeBuffer::GetInternalBuffer()
+{
+    CONTRACTL
+    {
+        NOTHROW;
+        GC_NOTRIGGER;
+        MODE_ANY;
+    }
     CONTRACTL_END;
 
-    ClrVirtualFree(m_pBuffer, 0, MEM_RELEASE);
+    return m_pBuffer;
 }
 
 bool EventPipeBuffer::WriteEvent(Thread *pThread, EventPipeSession &session, EventPipeEvent &event, EventPipeEventPayload &payload, LPCGUID pActivityId, LPCGUID pRelatedActivityId, StackContents *pStack)

@@ -20,6 +20,7 @@ class EventPipeSession;
 class EventPipeThread;
 struct EventPipeSequencePoint;
 
+
 class EventPipeBufferManager
 {
 
@@ -71,6 +72,7 @@ private:
     EventPipeEventInstance* m_pCurrentEvent;
     EventPipeBuffer* m_pCurrentBuffer;
     EventPipeBufferList* m_pCurrentBufferList;
+    EventPipeBufferAllocator* m_pEventPipeBufferAllocator;
 
 #ifdef _DEBUG
     // For debugging purposes.

@@ -54,6 +54,8 @@ EventPipeBufferManager::EventPipeBufferManager(EventPipeSession* pSession, size_
 
     m_maxSizeOfAllBuffers = Clamp((size_t)100 * 1024, maxSizeOfAllBuffers, (size_t)UINT32_MAX);
 
+    m_pEventPipeBufferAllocator = new EventPipeBufferAllocator(m_maxSizeOfAllBuffers);
+
     if (sequencePointAllocationBudget == 0)
     {
         // sequence points disabled
@@ -80,6 +82,7 @@ EventPipeBufferManager::~EventPipeBufferManager()
 
     // setting this true should have no practical effect other than satisfying asserts at this point.
     m_writeEventSuspending = TRUE;
+    delete m_pEventPipeBufferAllocator;
     DeAllocateBuffers();
 }
 
@@ -146,28 +149,17 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
     EventPipeBuffer *pNewBuffer = NULL;
     if (allocateNewBuffer)
     {
-        // Pick a buffer size by multiplying the base buffer size by the number of buffers already allocated for this thread.
-        unsigned int sizeMultiplier = pThreadBufferList->GetCount() + 1;
-
-        // Pick the base buffer size based.  Debug builds have a smaller size to stress the allocate/steal path more.
-        unsigned int baseBufferSize =
-#ifdef _DEBUG
-            30 * 1024; // 30K
-#else
-            100 * 1024; // 100K
-#endif
-        unsigned int bufferSize = baseBufferSize * sizeMultiplier;
-
-        // Make sure that buffer size >= request size so that the buffer size does not
-        // determine the max event size.
         _ASSERTE(requestSize <= availableBufferSize);
-        bufferSize = Max(requestSize, bufferSize);
-        bufferSize = Min((unsigned int)bufferSize, (unsigned int)availableBufferSize);
 
-        // Don't allow the buffer size to exceed 1MB.
-        const unsigned int maxBufferSize = 1024 * 1024;
-        bufferSize = Min(bufferSize, maxBufferSize);
+        // TODO: Make the mmap'd pool have many sizes to handle this
+        if (requestSize > 1024 * 1024)
+        {
+            return NULL;
+        }
 
+        unsigned int bufferSize = GetOsPageSize() * 25; // This is the default size of buffer. On most Unix systems this should be 100K.
+
+        BYTE * newBuffer = m_pEventPipeBufferAllocator->Alloc();
         // EX_TRY is used here as opposed to new (nothrow) because
         // the constructor also allocates a private buffer, which
         // could throw, and cannot be easily checked
@@ -176,7 +168,7 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
             // The sequence counter is exclusively mutated on this thread so this is a thread-local
             // read.
             unsigned int sequenceNumber = pSessionState->GetVolatileSequenceNumber();
-            pNewBuffer = new EventPipeBuffer(bufferSize, pSessionState->GetThread(), sequenceNumber);
+            pNewBuffer = new EventPipeBuffer(newBuffer, pSessionState->GetThread(), sequenceNumber);
         }
         EX_CATCH
         {
@@ -186,6 +178,7 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
 
         if (pNewBuffer == NULL)
         {
+            m_pEventPipeBufferAllocator->Free(newBuffer);
             return NULL;
         }
 
@@ -211,18 +204,17 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
 #ifdef _DEBUG
         m_numBuffersAllocated++;
 #endif // _DEBUG
-    }
 
-    // Set the buffer on the thread.
-    if (pNewBuffer != NULL)
-    {
-        pThreadBufferList->InsertTail(pNewBuffer);
-        return pNewBuffer;
+        // Set the buffer on the thread.
+        if (pNewBuffer != NULL)
+        {
+            pThreadBufferList->InsertTail(pNewBuffer);
+            return pNewBuffer;
+        }
     }
-
     return NULL;
-}
-
+}               
+            
 void EventPipeBufferManager::EnqueueSequencePoint(EventPipeSequencePoint* pSequencePoint)
 {
     CONTRACTL
@@ -338,6 +330,7 @@ void EventPipeBufferManager::DeAllocateBuffer(EventPipeBuffer *pBuffer)
     if (pBuffer != NULL)
     {
         m_sizeOfAllBuffers -= pBuffer->GetSize();
+        m_pEventPipeBufferAllocator->Free(pBuffer->GetInternalBuffer());
         delete (pBuffer);
 #ifdef _DEBUG
         m_numBuffersAllocated--;
