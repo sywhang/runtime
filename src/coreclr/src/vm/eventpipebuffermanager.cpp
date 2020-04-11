@@ -152,14 +152,18 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
         _ASSERTE(requestSize <= availableBufferSize);
 
         // TODO: Make the mmap'd pool have many sizes to handle this
-        if (requestSize > 1024 * 1024)
+        if (requestSize > 4096 * 25)
         {
             return NULL;
         }
 
-        unsigned int bufferSize = GetOsPageSize() * 25; // This is the default size of buffer. On most Unix systems this should be 100K.
+        unsigned int bufferSize = 4096 * 25; // This is the default size of each buffer. On most Unix systems this should be 100K.
 
         BYTE * newBuffer = m_pEventPipeBufferAllocator->Alloc();
+        if (newBuffer == nullptr)
+        {
+            return NULL;
+        }
         // EX_TRY is used here as opposed to new (nothrow) because
         // the constructor also allocates a private buffer, which
         // could throw, and cannot be easily checked
