@@ -19,6 +19,7 @@ namespace System.Diagnostics.Tracing
         private IncrementingPollingCounter? _gen0GCCounter;
         private IncrementingPollingCounter? _gen1GCCounter;
         private IncrementingPollingCounter? _gen2GCCounter;
+        private IncrementingPollingCounter? _pohGCCounter;
         private PollingCounter? _cpuTimeCounter;
         private PollingCounter? _workingSetCounter;
         private PollingCounter? _threadPoolThreadCounter;
@@ -35,6 +36,7 @@ namespace System.Diagnostics.Tracing
         private PollingCounter? _gen1SizeCounter;
         private PollingCounter? _gen2SizeCounter;
         private PollingCounter? _lohSizeCounter;
+        private PollingCounter? _pohSizeCounter;
         private PollingCounter? _assemblyCounter;
 #endif
 
@@ -62,6 +64,7 @@ namespace System.Diagnostics.Tracing
                 _gen0GCCounter ??= new IncrementingPollingCounter("gen-0-gc-count", this, () => GC.CollectionCount(0)) { DisplayName = "Gen 0 GC Count", DisplayRateTimeScale = new TimeSpan(0, 1, 0) };
                 _gen1GCCounter ??= new IncrementingPollingCounter("gen-1-gc-count", this, () => GC.CollectionCount(1)) { DisplayName = "Gen 1 GC Count", DisplayRateTimeScale = new TimeSpan(0, 1, 0) };
                 _gen2GCCounter ??= new IncrementingPollingCounter("gen-2-gc-count", this, () => GC.CollectionCount(2)) { DisplayName = "Gen 2 GC Count", DisplayRateTimeScale = new TimeSpan(0, 1, 0) };
+                _pohGCCounter ??= new IncrementingPollingCounter("poh-gc-count", this, () => GC.CollectionCount(4)) { DisplayName = "Pinned Object Heap GC Count", DisplayRateTimeScale = new TimeSpan(0, 1, 0) };
                 _threadPoolThreadCounter ??= new PollingCounter("threadpool-thread-count", this, () => ThreadPool.ThreadCount) { DisplayName = "ThreadPool Thread Count" };
                 _monitorContentionCounter ??= new IncrementingPollingCounter("monitor-lock-contention-count", this, () => Monitor.LockContentionCount) { DisplayName = "Monitor Lock Contention Count", DisplayRateTimeScale = new TimeSpan(0, 0, 1) };
                 _threadPoolQueueCounter ??= new PollingCounter("threadpool-queue-length", this, () => ThreadPool.PendingWorkItemCount) { DisplayName = "ThreadPool Queue Length" };
@@ -76,6 +79,7 @@ namespace System.Diagnostics.Tracing
                 _gen1SizeCounter ??= new PollingCounter("gen-1-size", this, () => GC.GetGenerationSize(1)) { DisplayName = "Gen 1 Size", DisplayUnits = "B" };
                 _gen2SizeCounter ??= new PollingCounter("gen-2-size", this, () => GC.GetGenerationSize(2)) { DisplayName = "Gen 2 Size", DisplayUnits = "B" };
                 _lohSizeCounter ??= new PollingCounter("loh-size", this, () => GC.GetGenerationSize(3)) { DisplayName = "LOH Size", DisplayUnits = "B" };
+                _pohSizeCounter ??= new PollingCounter("poh-size", this, () => GC.GetGenerationSize(4)) { DisplayName = "POH Size", DisplayUnits = "B" };
                 _assemblyCounter ??= new PollingCounter("assembly-count", this, () => System.Reflection.Assembly.GetAssemblyCount()) { DisplayName = "Number of Assemblies Loaded" };
 #endif
             }
