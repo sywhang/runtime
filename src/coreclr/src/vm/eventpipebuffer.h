@@ -46,9 +46,9 @@ class EventPipeBufferAllocator
 {
 private:
     BYTE* m_pBlockStart;
-    uint32_t osPageSize;
+    size_t osPageSize;
     uint32_t * m_allocBitMap;
-    uint32_t m_pageCnt;
+    size_t m_pageCnt;
 
 public:
     // Allocate a buffer

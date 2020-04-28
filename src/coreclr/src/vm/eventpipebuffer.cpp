@@ -53,7 +53,7 @@ BYTE* EventPipeBufferAllocator::Alloc()
     // TODO: Is this really faster...?
     bool found = false;
     int bufferIdx = -1;
-    for (int i = 0; i < m_pageCnt/32; i++)
+    for (unsigned int i = 0; i < m_pageCnt/32; i++)
     {
         // Check if there is a free page
         if (m_allocBitMap[i] ^ 0xFFFFFFFF)
@@ -91,7 +91,7 @@ BYTE* EventPipeBufferAllocator::Alloc()
 void EventPipeBufferAllocator::Free(BYTE * pBuffer)
 {
     // calculate the index with the offset
-    int bufferIdx = (pBuffer - m_pBlockStart) / osPageSize;
+    int64_t bufferIdx = (pBuffer - m_pBlockStart) / osPageSize;
 
     // set the correct bit to 0 in the bitmap
     m_allocBitMap[bufferIdx / 32] &= ~(1 << (bufferIdx % 32));
