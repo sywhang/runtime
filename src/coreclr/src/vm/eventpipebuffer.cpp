@@ -11,6 +11,88 @@
 
 #ifdef FEATURE_PERFTRACING
 
+EventPipeBufferAllocList::EventPipeBufferAllocList(size_t maxBufferSize, size_t bufferSize)
+{
+    m_totalSize = maxBufferSize;
+    m_curSize = 0;
+    m_bufferSize = bufferSize;
+    m_blockCnt = m_totalSize / m_bufferSize;
+    m_pBlockStart = (BYTE*)ClrVirtualAlloc(NULL, m_totalSize, MEM_COMMIT, PAGE_READWRITE);
+    memset(m_pBlockStart, 0, m_totalSize);
+
+    // Array of integers whose bits are used to keep track of whether 
+    // nth buffer has been allocated.
+    // Basically the bit that indicates whether Nth buffer is free
+    // is logged in (N % 32)th bit of (m_allocBitMap[N/32])th integer.
+    m_allocBitMapSize = m_blockCnt / sizeof(uint32_t);
+    m_allocBitMap = new uint32_t[m_allocBitMapSize];
+}
+
+
+EventPipeBufferAllocList::~EventPipeBufferAllocList()
+{
+    // Free the mmap'd chunk of memory
+    ClrVirtualFree(m_pBlockStart, 0, MEM_RELEASE);
+
+    // Free the bitmap 
+    delete[] m_allocBitMap;
+}
+
+BYTE* EventPipeBufferAllocList::Alloc()
+{
+    // Find a free buffer
+    bool found = false;
+    int bufferIdx = -1;
+    // Each integer here represents a free bitmap of 32 buffers.
+    for (unsigned int i = 0; i < m_allocBitMapSize; i++)
+    {
+        // Check if there is a free buffer in this chunk
+        if (m_allocBitMap[i] ^ 0xFFFFFFFF)
+        {
+            for (int j = 0; j < sizeof(uint32_t); j++)
+            {
+                if (!(m_allocBitMap[i] & (1 << j)))
+                {
+                    bufferIdx = i * sizeof(uint32_t) + j;
+                    m_allocBitMap[i] |= (1 << j);
+                    break;
+                }
+            }
+            // Should've found a free buffer
+            _ASSERTE(bufferIdx != -1);
+            break;
+        }
+    }
+
+    if (bufferIdx == -1)
+    {
+        return nullptr;
+    }
+    else
+    {
+        // memset the new buffer and return it.
+        _ASSERTE(bufferIdx < m_blockCnt);
+        BYTE * newBuffer = m_pBlockStart + (bufferIdx * m_bufferSize);
+        memset(newBuffer, 0, m_bufferSize);
+        m_curSize += m_bufferSize;
+        return newBuffer;
+    }
+}
+
+void EventPipeBufferAllocList::Free(BYTE* pBuffer)
+{
+    // calculate the index with the offset
+    int64_t bufferIdx = (pBuffer - m_pBlockStart) / m_bufferSize;
+
+    // set the correct bit to 0 in the bitmap
+    m_allocBitMap[bufferIdx / 32] &= ~(1 << (bufferIdx % 32));
+}
+
+bool EventPipeBufferAllocList::HasSpace()
+{
+    return m_curSize < m_totalSize;
+}
+
 EventPipeBufferAllocator::EventPipeBufferAllocator(size_t maxBufferSize)
 {
     CONTRACTL
@@ -19,14 +101,9 @@ EventPipeBufferAllocator::EventPipeBufferAllocator(size_t maxBufferSize)
         MODE_ANY;
     }
     CONTRACTL_END;
-
-    // First, find the OS page size
-    osPageSize = 4096 * 25;
-
-    // mmap chunk of memory that fits within maxBufferSize and is multiple of OS page size
-    m_pageCnt = maxBufferSize / osPageSize;
-    m_pBlockStart = (BYTE*)ClrVirtualAlloc(NULL, osPageSize * (m_pageCnt + 1), MEM_COMMIT, PAGE_READWRITE);
-    memset(m_pBlockStart, 0, osPageSize * (m_pageCnt + 1));
+    m_pageCnt = maxBufferSize / m_chunkSize;
+    m_pBlockStart = (BYTE*)ClrVirtualAlloc(NULL, m_chunkSize * (m_pageCnt + 1), MEM_COMMIT, PAGE_READWRITE);
+    memset(m_pBlockStart, 0, m_chunkSize * (m_pageCnt + 1));
 
     // Array of integers whose bits are used to keep track of whether 
     // nth buffer has been allocated.
@@ -81,8 +158,8 @@ BYTE* EventPipeBufferAllocator::Alloc()
     {
         // memset the new buffer and return it.
         _ASSERTE(bufferIdx < m_pageCnt);
-        BYTE * newBuffer = m_pBlockStart + (bufferIdx * osPageSize);
-        memset(newBuffer, 0, osPageSize);
+        BYTE * newBuffer = m_pBlockStart + (bufferIdx * m_chunkSize);
+        memset(newBuffer, 0, m_chunkSize);
 
         return newBuffer;
     }
@@ -91,7 +168,7 @@ BYTE* EventPipeBufferAllocator::Alloc()
 void EventPipeBufferAllocator::Free(BYTE * pBuffer)
 {
     // calculate the index with the offset
-    int64_t bufferIdx = (pBuffer - m_pBlockStart) / osPageSize;
+    int64_t bufferIdx = (pBuffer - m_pBlockStart) / m_chunkSize;
 
     // set the correct bit to 0 in the bitmap
     m_allocBitMap[bufferIdx / 32] &= ~(1 << (bufferIdx % 32));

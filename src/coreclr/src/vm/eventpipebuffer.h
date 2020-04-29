@@ -41,26 +41,52 @@ enum EventPipeBufferState
 };
 
 
+class EventPipeBufferAllocList
+{
+private:
+    BYTE* m_pBlockStart;
+    size_t m_blockCnt;
+    size_t m_totalSize;
+    size_t m_curSize;
+    size_t m_bufferSize;
+    uint32_t* m_allocBitMap;
+    size_t m_allocBitMapSize;
+    
+
+public:
+    EventPipeBufferAllocList(size_t maxBufferSize, size_t bufferSize);
+
+    ~EventPipeBufferAllocList();
+
+    BYTE* Alloc();
+
+    void Free(BYTE* pBuffer);    
+
+    bool HasSpace();
+};
+
+
 // Helper class for allocating EventPipeBuffers.
 class EventPipeBufferAllocator
 {
 private:
     BYTE* m_pBlockStart;
-    size_t osPageSize;
-    uint32_t * m_allocBitMap;
     size_t m_pageCnt;
+    // This is the minimum size of a buffer
+    const size_t m_chunkSize = 4096 * 25; // 1MB
+    // This is an array of integers bitmap representing the free buffers
+    uint32_t* m_allocBitMap;
 
 public:
-    // Allocate a buffer
+    EventPipeBufferAllocator(size_t maxBufferSize);
+
+    ~EventPipeBufferAllocator();
+
+    // Allocate a new buffer
     BYTE* Alloc();
 
     // "Free" a buffer. This marks the internal buffer as available for use.
     void Free(BYTE* pBuffer);
-
-public:
-
-    EventPipeBufferAllocator(size_t maxBufferSize);
-    ~EventPipeBufferAllocator();
 };
 
 class EventPipeBuffer
