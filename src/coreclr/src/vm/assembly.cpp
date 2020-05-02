@@ -1542,12 +1542,7 @@ HRESULT RunMain(MethodDesc *pFD ,
         return E_INVALIDARG;
     }
 
-#ifdef HOST_UNIX
-    if (EventEnabledMain_V1())
-        FireEtwMain_V1(GetClrInstanceId());
-#else
     ETWFireEvent(Main_V1);
-#endif
 
     Param param;
 
@@ -1565,12 +1560,7 @@ HRESULT RunMain(MethodDesc *pFD ,
     }
     EX_END_NOCATCH
 
-#ifdef HOST_UNIX
-    if (EventEnabledMainEnd_V1())
-        FireEtwMainEnd_V1(GetClrInstanceId());
-#else
     ETWFireEvent(MainEnd_V1);
-#endif
 
     return hr;
 }

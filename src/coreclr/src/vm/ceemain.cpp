@@ -685,12 +685,7 @@ void EEStartupHelper()
         InitializeEventTracing();
 
         // Fire the EE startup ETW event
-#ifdef HOST_UNIX
-        if (EventEnabledEEStartupStart_V1())
-            FireEtwEEStartupStart_V1(GetClrInstanceId());
-#else // HOST_UNIX
         ETWFireEvent(EEStartupStart_V1);
-#endif // HOST_UNIX
 
 #endif // FEATURE_EVENT_TRACE
 
