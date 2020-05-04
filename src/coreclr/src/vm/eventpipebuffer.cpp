@@ -24,12 +24,13 @@ EventPipeBufferAllocList::EventPipeBufferAllocList(size_t maxBufferSize, size_t 
     // nth buffer has been allocated.
     // Basically the bit that indicates whether Nth buffer is free
     // is logged in (N % 32)th bit of (m_allocBitMap[N/32])th integer.
-    m_allocBitMapSize = m_blockCnt / sizeof(uint32_t);
+    m_allocBitMapSize = m_blockCnt / 32;
+    m_allocBitMapSize = m_allocBitMapSize > 0 ? m_allocBitMapSize : 1;
     m_allocBitMap = new uint32_t[m_allocBitMapSize];
 }
 
 
-EventPipeBufferAllocList::~EventPipeBufferAllocList()
+void EventPipeBufferAllocList::Dispose()
 {
     // Free the mmap'd chunk of memory
     ClrVirtualFree(m_pBlockStart, 0, MEM_RELEASE);
@@ -49,11 +50,11 @@ BYTE* EventPipeBufferAllocList::Alloc()
         // Check if there is a free buffer in this chunk
         if (m_allocBitMap[i] ^ 0xFFFFFFFF)
         {
-            for (int j = 0; j < sizeof(uint32_t); j++)
+            for (int j = 0; j < 32; j++)
             {
                 if (!(m_allocBitMap[i] & (1 << j)))
                 {
-                    bufferIdx = i * sizeof(uint32_t) + j;
+                    bufferIdx = i * 32 + j;
                     m_allocBitMap[i] |= (1 << j);
                     break;
                 }
@@ -64,7 +65,7 @@ BYTE* EventPipeBufferAllocList::Alloc()
         }
     }
 
-    if (bufferIdx == -1)
+    if (bufferIdx == -1 || bufferIdx >= m_blockCnt)
     {
         return nullptr;
     }
@@ -84,13 +85,20 @@ void EventPipeBufferAllocList::Free(BYTE* pBuffer)
     // calculate the index with the offset
     int64_t bufferIdx = (pBuffer - m_pBlockStart) / m_bufferSize;
 
+    m_curSize -= m_bufferSize;
+
     // set the correct bit to 0 in the bitmap
     m_allocBitMap[bufferIdx / 32] &= ~(1 << (bufferIdx % 32));
 }
 
-bool EventPipeBufferAllocList::HasSpace()
+bool EventPipeBufferAllocList::HasFreeBuffer()
 {
     return m_curSize < m_totalSize;
+}
+
+bool EventPipeBufferAllocList::Contains(BYTE* bufferAddr)
+{
+    return bufferAddr >= m_pBlockStart && bufferAddr < m_pBlockStart + m_totalSize;
 }
 
 EventPipeBufferAllocator::EventPipeBufferAllocator(size_t maxBufferSize)
@@ -101,77 +109,130 @@ EventPipeBufferAllocator::EventPipeBufferAllocator(size_t maxBufferSize)
         MODE_ANY;
     }
     CONTRACTL_END;
-    m_pageCnt = maxBufferSize / m_chunkSize;
-    m_pBlockStart = (BYTE*)ClrVirtualAlloc(NULL, m_chunkSize * (m_pageCnt + 1), MEM_COMMIT, PAGE_READWRITE);
-    memset(m_pBlockStart, 0, m_chunkSize * (m_pageCnt + 1));
 
-    // Array of integers whose bits are used to keep track of whether 
-    // nth buffer has been allocated.
-    // Basically the bit that indicates whether Nth buffer is free
-    // is logged in (N % 32)th bit of (m_allocBitMap[N/32])th integer.
-    m_allocBitMap = new uint32_t[m_pageCnt / 32];
-    memset(m_allocBitMap, 0, m_pageCnt / 32);
+    m_maxBufferSize = maxBufferSize;
+
+    // Start by committing small amount of memory
+    m_bufferLists = new EventPipeBufferAllocList*[MAX_SIZE_MULTIPLIER];
+ 
+    // To initialize, start with a single buffer size * 10
+    for (int i = 0; i < MAX_SIZE_MULTIPLIER+1; i++)
+    {
+        m_bufferLists[i] = new EventPipeBufferAllocList((MIN_BUFFER_SIZE << i) * 10, MIN_BUFFER_SIZE << i);
+    }
 }
 
 
 EventPipeBufferAllocator::~EventPipeBufferAllocator()
 {
-    // Free the mmap'd chunk of memory
-    ClrVirtualFree(m_pBlockStart, 0, MEM_RELEASE);
-
-    // Free the bitmap 
-    delete[] m_allocBitMap;
+    for (int i = 0; i < MAX_SIZE_MULTIPLIER+1; i++)
+    {
+        m_bufferLists[i]->Dispose();
+    }
+    // Free the array itself
+    delete[] m_bufferLists;
 }
 
 
-BYTE* EventPipeBufferAllocator::Alloc()
+BYTE* EventPipeBufferAllocator::Alloc(size_t& requestedSize)
 {
-    // Find a free buffer
-    // TODO: Is this really faster...?
-    bool found = false;
-    int bufferIdx = -1;
-    for (unsigned int i = 0; i < m_pageCnt/32; i++)
+    // First check if requestedSize is greater than max size. If so, return null
+    if (requestedSize > MAX_BUFFER_SIZE)
     {
-        // Check if there is a free page
-        if (m_allocBitMap[i] ^ 0xFFFFFFFF)
+        return nullptr;
+    }
+
+    // Find the correct buffer list to allocate from
+    int bufferListIdx = 0;
+    for (int i = 0; i < MAX_SIZE_MULTIPLIER+1; i++)
+    {
+        if (requestedSize <= MIN_BUFFER_SIZE << i)
         {
-            // TODO: there's GOTTA be faster way to do this but it's 4am 
-            // and my brain is feeling jelly....
-            for (int j = 0; j < 32; j++)
-            {
-                if (!(m_allocBitMap[i] & (1 << j)))
-                {
-                    bufferIdx = i * 32 + j;
-                    m_allocBitMap[i] |= (1 << j);
-                    break;
-                }
-            }
+            requestedSize = MIN_BUFFER_SIZE << i;
+            bufferListIdx = i;
             break;
         }
     }
 
-    if (bufferIdx == -1)
-    {
-        return nullptr;
-    }
-    else
-    {
-        // memset the new buffer and return it.
-        _ASSERTE(bufferIdx < m_pageCnt);
-        BYTE * newBuffer = m_pBlockStart + (bufferIdx * m_chunkSize);
-        memset(newBuffer, 0, m_chunkSize);
+    EventPipeBufferAllocList* pCurBufferList = m_bufferLists[bufferListIdx];
+    BYTE* newBuffer = NULL;
 
-        return newBuffer;
+    // iterate through the linked list of bufferLists to allocate a buffer.
+    while (pCurBufferList->Next != NULL)
+    {
+        if (pCurBufferList->HasFreeBuffer())
+        {
+            newBuffer = pCurBufferList->Alloc();
+            break;
+        }
+        pCurBufferList = pCurBufferList->Next;
+    }
+
+    if (pCurBufferList->HasFreeBuffer())
+    {
+        newBuffer = pCurBufferList->Alloc();
+    }
+
+    // if all buffers are filled, try to expand the given size's list.
+    if (newBuffer == NULL)
+    {
+        if (TryExpandBuffer(pCurBufferList, bufferListIdx))
+        {
+            pCurBufferList = pCurBufferList->Next;
+            newBuffer = pCurBufferList->Alloc();
+        }
+        else 
+        {
+            // Could not allocate more buffer
+            return nullptr;
+        }
+    }
+    return newBuffer; 
+}
+
+void EventPipeBufferAllocator::Free(BYTE* pBuffer, size_t bufferSize)
+{
+    int bufferListIdx = 0;
+    for (int i = 0; i < MAX_SIZE_MULTIPLIER+1; i++)
+    {
+        if (bufferSize == MIN_BUFFER_SIZE << i)
+        {
+            bufferListIdx = i;
+            break;
+        }
+    }
+
+    // Traverse the buffer list to find the right one
+    EventPipeBufferAllocList* lst = m_bufferLists[bufferListIdx];
+    while (lst != NULL)
+    {
+        if (lst->Contains(pBuffer))
+        {
+            lst->Free(pBuffer);
+            return;
+        }
+        lst = lst->Next;
     }
 }
 
-void EventPipeBufferAllocator::Free(BYTE * pBuffer)
+bool EventPipeBufferAllocator::TryExpandBuffer(EventPipeBufferAllocList* pList, int bufferListIdx)
 {
-    // calculate the index with the offset
-    int64_t bufferIdx = (pBuffer - m_pBlockStart) / m_chunkSize;
-
-    // set the correct bit to 0 in the bitmap
-    m_allocBitMap[bufferIdx / 32] &= ~(1 << (bufferIdx % 32));
+    EX_TRY
+    {
+        // Allocate a new list with 2x the limit.
+        pList->Next = new EventPipeBufferAllocList(pList->GetTotalSize() * 2, pList->GetBufferSize());
+    }
+    EX_CATCH
+    {
+        pList->Next= NULL;
+    }
+    EX_END_CATCH(SwallowAllExceptions);
+    
+    if (pList->Next != NULL)
+    {
+        return true;
+    }
+    return false;
 }
 
 

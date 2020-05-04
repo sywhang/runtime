@@ -94,7 +94,7 @@ bool EventPipeBufferManager::IsLockOwnedByCurrentThread()
 #endif
 
 EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThreadSessionState* pSessionState,
-                                                                 unsigned int requestSize,
+                                                                 size_t requestSize,
                                                                  BOOL & writeSuspended)
 {
     CONTRACTL
@@ -151,15 +151,7 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
     {
         _ASSERTE(requestSize <= availableBufferSize);
 
-        // TODO: Make the mmap'd pool have many sizes to handle this
-        if (requestSize > 4096 * 25)
-        {
-            return NULL;
-        }
-
-        unsigned int bufferSize = 4096 * 25; // This is the default size of each buffer. On most Unix systems this should be 100K.
-
-        BYTE * newBuffer = m_pEventPipeBufferAllocator->Alloc();
+        BYTE * newBuffer = m_pEventPipeBufferAllocator->Alloc(requestSize);
         if (newBuffer == nullptr)
         {
             return NULL;
@@ -182,15 +174,15 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
 
         if (pNewBuffer == NULL)
         {
-            m_pEventPipeBufferAllocator->Free(newBuffer);
+            m_pEventPipeBufferAllocator->Free(newBuffer, requestSize);
             return NULL;
         }
 
-        m_sizeOfAllBuffers += bufferSize;
+        m_sizeOfAllBuffers += pNewBuffer->GetSize();
         if (m_sequencePointAllocationBudget != 0)
         {
             // sequence point bookkeeping
-            if (bufferSize >= m_remainingSequencePointAllocationBudget)
+            if (requestSize >= m_remainingSequencePointAllocationBudget)
             {
                 EventPipeSequencePoint* pSequencePoint = new (nothrow) EventPipeSequencePoint();
                 if (pSequencePoint != NULL)
@@ -202,7 +194,7 @@ EventPipeBuffer* EventPipeBufferManager::AllocateBufferForThread(EventPipeThread
             }
             else
             {
-                m_remainingSequencePointAllocationBudget -= bufferSize;
+                m_remainingSequencePointAllocationBudget -= requestSize;
             }
         }
 #ifdef _DEBUG
@@ -334,7 +326,7 @@ void EventPipeBufferManager::DeAllocateBuffer(EventPipeBuffer *pBuffer)
     if (pBuffer != NULL)
     {
         m_sizeOfAllBuffers -= pBuffer->GetSize();
-        m_pEventPipeBufferAllocator->Free(pBuffer->GetInternalBuffer());
+        m_pEventPipeBufferAllocator->Free(pBuffer->GetInternalBuffer(), pBuffer->GetSize());
         delete (pBuffer);
 #ifdef _DEBUG
         m_numBuffersAllocated--;
@@ -430,7 +422,7 @@ bool EventPipeBufferManager::WriteEvent(Thread *pThread, EventPipeSession &sessi
         // However, the GC is waiting on this call to return so that it can make forward progress.  Thus it is not safe
         // to switch to preemptive mode here.
 
-        unsigned int requestSize = sizeof(EventPipeEventInstance) + payload.GetSize();
+        size_t requestSize = (size_t)(sizeof(EventPipeEventInstance) + payload.GetSize());
         BOOL writeSuspended = FALSE;
         pBuffer = AllocateBufferForThread(pSessionState, requestSize, writeSuspended);
         if (pBuffer == NULL)

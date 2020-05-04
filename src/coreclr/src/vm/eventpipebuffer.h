@@ -51,18 +51,32 @@ private:
     size_t m_bufferSize;
     uint32_t* m_allocBitMap;
     size_t m_allocBitMapSize;
-    
 
 public:
+    EventPipeBufferAllocList* Next;
+
     EventPipeBufferAllocList(size_t maxBufferSize, size_t bufferSize);
 
-    ~EventPipeBufferAllocList();
+    void Dispose();
 
     BYTE* Alloc();
 
     void Free(BYTE* pBuffer);    
 
-    bool HasSpace();
+    bool HasFreeBuffer();
+
+    bool Contains(BYTE* bufferAddr);
+
+    size_t GetTotalSize()
+    {
+        return m_totalSize;
+    }
+
+    size_t GetBufferSize()
+    {
+        return m_bufferSize;
+    }
+
 };
 
 
@@ -70,23 +84,27 @@ public:
 class EventPipeBufferAllocator
 {
 private:
-    BYTE* m_pBlockStart;
-    size_t m_pageCnt;
-    // This is the minimum size of a buffer
-    const size_t m_chunkSize = 4096 * 25; // 1MB
-    // This is an array of integers bitmap representing the free buffers
-    uint32_t* m_allocBitMap;
+    size_t m_maxBufferSize;
+    size_t m_curTotalCommittedSize;
+    const int MAX_SIZE_MULTIPLIER = 3;
+    const uint32_t MIN_BUFFER_SIZE = 1024 * 100; // ~100KB
+    const uint32_t MAX_BUFFER_SIZE = MIN_BUFFER_SIZE << MAX_SIZE_MULTIPLIER; // ~800KB
+    EventPipeBufferAllocList** m_bufferLists;
 
 public:
     EventPipeBufferAllocator(size_t maxBufferSize);
-
     ~EventPipeBufferAllocator();
 
     // Allocate a new buffer
-    BYTE* Alloc();
+    BYTE* Alloc(size_t& requestedSize);
 
     // "Free" a buffer. This marks the internal buffer as available for use.
-    void Free(BYTE* pBuffer);
+    // It takes in the size because the buffer returning this knows the size of 
+    // this buffer anyway so we can cheat to reduce lookup cost.
+    void Free(BYTE* pBuffer, size_t bufferSize);
+
+    bool TryExpandBuffer(EventPipeBufferAllocList* pList, int bufferListIdx);
+
 };
 
 class EventPipeBuffer
