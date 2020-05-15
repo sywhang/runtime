@@ -71,6 +71,7 @@ namespace DiagnosticsIpc
         Dump          = 0x01,
         EventPipe     = 0x02,
         Profiler      = 0x03,
+        Startup       = 0x04,
 
         Server        = 0xFF,
     };

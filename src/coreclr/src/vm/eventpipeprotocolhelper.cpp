@@ -127,6 +127,9 @@ void EventPipeProtocolHelper::HandleIpcMessage(DiagnosticsIpc::IpcMessage& messa
     case EventPipeCommandId::CollectTracing2:
         EventPipeProtocolHelper::CollectTracing2(message, pStream);
         break;
+    case EventPipeCommandId::StartupTracing:
+        EventPipeProtocolHelper::StartupTracing(message, pStream);
+        break;
     case EventPipeCommandId::StopTracing:
         EventPipeProtocolHelper::StopTracing(message, pStream);
         break;
@@ -301,4 +304,16 @@ void EventPipeProtocolHelper::CollectTracing2(DiagnosticsIpc::IpcMessage& messag
     }
 }
 
+void EventPipeProtocolHelper::StartupTracing(DiagnosticsIpc::IpcMessage& message, IpcStream *pStream)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_PREEMPTIVE;
+        PRECONDITION(pStream != nullptr);
+    }
+    CONTRACTL_END;
+    EventPipe::StartStartupSession(pStream);
+}
 #endif // FEATURE_PERFTRACING

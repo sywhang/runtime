@@ -76,6 +76,8 @@ public:
     // starting with file header info and then buffered events
     static void StartStreaming(EventPipeSessionID id);
 
+    static void StartStreaming(EventPipeSessionID id, IpcStream * pStream);
+
     // Specifies whether or not the event pipe is enabled.
     static bool Enabled()
     {
@@ -119,6 +121,10 @@ public:
 
     // Get the event handle that signals when new events are available.
     static HANDLE GetWaitHandle(EventPipeSessionID sessionID);
+
+    static bool IsStartupSessionStarted();
+
+    static void StartStartupSession(IpcStream* pStream);
 
 #ifdef DEBUG
     static bool IsLockOwnedByCurrentThread();

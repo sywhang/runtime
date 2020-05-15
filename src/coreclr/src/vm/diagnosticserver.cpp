@@ -75,7 +75,7 @@ DWORD WINAPI DiagnosticServer::DiagnosticsServerThread(LPVOID)
                 EventPipeProtocolHelper::HandleIpcMessage(message, pStream);
                 break;
 
-            case DiagnosticsIpc::DiagnosticServerCommandSet::Dump:
+          case DiagnosticsIpc::DiagnosticServerCommandSet::Dump:
                 DumpDiagnosticProtocolHelper::HandleIpcMessage(message, pStream);
                 break;
 

@@ -379,7 +379,7 @@ void EventPipeSession::StartStreaming(IpcStream * pStream)
     }
     CONTRACTL_END;
 
-    m_pFile = new EventPipeFile(new IpcStreamWriter(reinterpret_cast<uint64_t>(this), pStream), format);
+    m_pFile = new EventPipeFile(new IpcStreamWriter(reinterpret_cast<uint64_t>(this), pStream), m_format);
     StartStreaming();
 }
 

@@ -38,6 +38,7 @@ Volatile<uint64_t> EventPipe::s_allowWrite = 0;
 
 
 unsigned long s_startupSession = 0;
+bool s_startupSessionStreamStarted = false;
 
 #ifndef TARGET_UNIX
 unsigned int * EventPipe::s_pProcGroupOffsets = nullptr;
@@ -206,7 +207,7 @@ void EventPipe::EnableViaEnvironmentVariables()
             }
         }
 
-        s_sessionID = EventPipe::Enable(
+        s_startupSession = EventPipe::Enable(
             outputPath,
             eventpipeCircularBufferMB,
             pProviders,
@@ -217,8 +218,12 @@ void EventPipe::EnableViaEnvironmentVariables()
             nullptr,
             false
         );
-        if (DOTNET_DiagnosticMonitorAddress != NULL)
-            EventPipe::StartStreaming(sessionID); // Defer this part 
+        CLRConfigStringHolder wAddress = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_DOTNET_DiagnosticsMonitorAddress);
+        int nCharactersWritten = 0;
+        if (wAddress == nullptr)
+        {
+            EventPipe::StartStreaming(s_startupSession); // Defer this part 
+        }
     }
 }
 
@@ -414,6 +419,24 @@ void EventPipe::StartStreaming(EventPipeSessionID id)
 
     pSession->StartStreaming();
 }
+
+void EventPipe::StartStreaming(EventPipeSessionID id, IpcStream * pStream)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    CrstHolder _crst(GetLock());
+
+    EventPipeSession *const pSession = reinterpret_cast<EventPipeSession *>(id);
+
+    pSession->StartStreaming(pStream);
+}
+
 
 void EventPipe::Disable(EventPipeSessionID id)
 {
@@ -965,5 +988,19 @@ bool EventPipe::IsLockOwnedByCurrentThread()
     return GetLock()->OwnedByCurrentThread();
 }
 #endif
+
+
+void EventPipe::StartStartupSession(IpcStream* pStream)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_NOTRIGGER;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    EventPipe::StartStreaming(s_startupSession, pStream);
+}
 
 #endif // FEATURE_PERFTRACING
