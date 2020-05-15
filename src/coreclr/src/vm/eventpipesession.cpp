@@ -65,7 +65,8 @@ EventPipeSession::EventPipeSession(
         break;
 
     case EventPipeSessionType::IpcStream:
-        m_pFile = new EventPipeFile(new IpcStreamWriter(reinterpret_cast<uint64_t>(this), pStream), format);
+        if (pStream != nullptr)
+            m_pFile = new EventPipeFile(new IpcStreamWriter(reinterpret_cast<uint64_t>(this), pStream), format);
         break;
 
     default:
@@ -364,6 +365,22 @@ CLREvent *EventPipeSession::GetWaitEvent()
     LIMITED_METHOD_CONTRACT;
 
     return m_pBufferManager->GetWaitEvent();
+}
+
+void EventPipeSession::StartStreaming(IpcStream * pStream)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_PREEMPTIVE;
+        // Lock must be held by EventPipe::Enable.
+        PRECONDITION(EventPipe::IsLockOwnedByCurrentThread());
+    }
+    CONTRACTL_END;
+
+    m_pFile = new EventPipeFile(new IpcStreamWriter(reinterpret_cast<uint64_t>(this), pStream), format);
+    StartStreaming();
 }
 
 void EventPipeSession::StartStreaming()

@@ -213,6 +213,8 @@ public:
     // - turns on IpcStreaming thread which flushes events to stream
     void StartStreaming();
 
+    void StartStreaming(IpcStream * pStream);
+
     // Disable a session in the event pipe.
     // side-effects: writes all buffers to stream/file
     void Disable();

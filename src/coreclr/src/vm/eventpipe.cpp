@@ -35,6 +35,10 @@ EventPipeConfiguration EventPipe::s_config;
 EventPipeEventSource *EventPipe::s_pEventSource = nullptr;
 VolatilePtr<EventPipeSession> EventPipe::s_pSessions[MaxNumberOfSessions];
 Volatile<uint64_t> EventPipe::s_allowWrite = 0;
+
+
+unsigned long s_startupSession = 0;
+
 #ifndef TARGET_UNIX
 unsigned int * EventPipe::s_pProcGroupOffsets = nullptr;
 #endif
@@ -202,18 +206,19 @@ void EventPipe::EnableViaEnvironmentVariables()
             }
         }
 
-        uint64_t sessionID = EventPipe::Enable(
+        s_sessionID = EventPipe::Enable(
             outputPath,
             eventpipeCircularBufferMB,
             pProviders,
             providerCnt,
-            EventPipeSessionType::File,
+            EventPipeSessionType::IpcStream,
             EventPipeSerializationFormat::NetTraceV4,
             true,
             nullptr,
             false
         );
-        EventPipe::StartStreaming(sessionID);
+        if (DOTNET_DiagnosticMonitorAddress != NULL)
+            EventPipe::StartStreaming(sessionID); // Defer this part 
     }
 }
 
@@ -298,8 +303,6 @@ EventPipeSessionID EventPipe::Enable(
 
     // If the state or arguments are invalid, bail here.
     if (sessionType == EventPipeSessionType::File && strOutputPath == nullptr)
-        return 0;
-    if (sessionType == EventPipeSessionType::IpcStream && pStream == nullptr)
         return 0;
 
     EventPipeSessionID sessionId = 0;
