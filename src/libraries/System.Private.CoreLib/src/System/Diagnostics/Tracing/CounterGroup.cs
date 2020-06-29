@@ -111,6 +111,33 @@ namespace System.Diagnostics.Tracing
             }
         }
 
+        internal static string GetAllCountersString()
+        {
+            string result = "";
+            lock (s_counterGroupLock)
+            {
+                for (var i = 0; i < s_counterGroups?.Length; i++)
+                {
+                    s_counterGroups[i].TryGetTarget(out CounterGroup? group);
+                    result += group?.GetCounterString();
+                }
+            }
+            return result;
+        }
+
+        internal string GetCounterString()
+        {
+            string res = "";
+            lock (s_counterGroupLock) // Lock the CounterGroup
+            {
+                foreach (var counter in _counters)
+                {
+                    res += $"{_eventSource.Name}:{counter.Name}";
+                }
+            }
+            return res;
+        }
+
 #endregion // Global CounterGroup Array management
 
 #region Timer Processing

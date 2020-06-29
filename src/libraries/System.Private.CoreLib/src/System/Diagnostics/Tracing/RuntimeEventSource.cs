@@ -40,7 +40,10 @@ namespace System.Diagnostics.Tracing
         private PollingCounter? _ilBytesJittedCounter;
         private PollingCounter? _methodsJittedCounter;
 #endif
-
+        public class Keywords
+        {
+            public const EventKeywords EnumerateCounters = (EventKeywords)1;
+        }
         public static void Initialize()
         {
             s_RuntimeEventSource = new RuntimeEventSource();
@@ -48,6 +51,12 @@ namespace System.Diagnostics.Tracing
 
         private RuntimeEventSource() : base(new Guid(0x49592C0F, 0x5A05, 0x516D, 0xAA, 0x4B, 0xA6, 0x4E, 0x02, 0x02, 0x6C, 0x89), EventSourceName, EventSourceSettings.EtwSelfDescribingEventFormat)
         {
+        }
+
+        [Event(1, Level=EventLevel.Informational, Keywords=Keywords.EnumerateCounters)]
+        public void SendCounterList()
+        {
+            this.WriteEvent(1, CounterGroup.GetAllCountersString());
         }
 
         protected override void OnEventCommand(EventCommandEventArgs command)
@@ -83,8 +92,9 @@ namespace System.Diagnostics.Tracing
                 _ilBytesJittedCounter ??= new PollingCounter("il-bytes-jitted", this, () => System.Runtime.CompilerServices.RuntimeHelpers.GetILBytesJitted()) { DisplayName = "IL Bytes Jitted", DisplayUnits = "B" };
                 _methodsJittedCounter ??= new PollingCounter("methods-jitted-count", this, () => System.Runtime.CompilerServices.RuntimeHelpers.GetMethodsJittedCount()) { DisplayName = "Number of Methods Jitted" };
 #endif
-            }
 
+                SendCounterList();
+            }
         }
     }
 }
