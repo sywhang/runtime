@@ -4,7 +4,7 @@
 
 namespace System.Diagnostics.Tracing
 {
-    internal static class RuntimeEventSourceHelper
+    internal static partial class RuntimeEventSourceHelper
     {
         private static long s_prevProcUserTime;
         private static long s_prevProcKernelTime;

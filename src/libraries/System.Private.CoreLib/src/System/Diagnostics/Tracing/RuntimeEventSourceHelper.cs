@@ -6,7 +6,7 @@ namespace System.Diagnostics.Tracing
 {
     internal static partial class RuntimeEventSourceHelper
     {
-        private static Interop.Sys.ProcessCpuInformation s_cpuInfo;
+        private static TimeSpan[] s_lastGCPause = ;
 
         internal static int GetCpuUsage() =>
             Interop.Sys.GetCpuUtilization(ref s_cpuInfo) / Environment.ProcessorCount;
