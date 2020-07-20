@@ -5214,11 +5214,11 @@ namespace System.Diagnostics.Tracing
 
         internal bool IsEventEnabled(EventLevel level, EventKeywords keywords)
         {
-            if (keywords != 0)
+            if (level == EventLevel.LogAlways || keywords == 0 || m_Keywords == 0)
             {
-                return (m_Level <= level) && ((m_Keywords | keywords) > 0);
+                return true;
             }
-            return true;
+            return (m_Level <= level) && ((m_Keywords & keywords) > 0);
         }
 
         // Only guaranteed to exist after a InsureInit()
