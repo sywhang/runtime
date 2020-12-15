@@ -2,7 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Reflection;
+using System.Collections;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
+using Microsoft.Diagnostics.NETCore.Client;
 
 namespace Tracing.Tests.Common
 {
@@ -21,8 +25,12 @@ namespace Tracing.Tests.Common
             EnableDefault(TimeSpan.FromMilliseconds(1), outputFile);
         }
 
-        public static void EnableDefault(TimeSpan profSampleDelay, string outputFile="default.netperf")
+        public static void EnableDefault(TimeSpan profSampleDelay, string outputFile="default.nettrace")
         {
+            // Prefix the output file name with current PID to make it not collide
+            outputFile = Process.GetCurrentProcess().Id.ToString() + outputFile;
+
+            /*
             // Setup the configuration values.
             uint circularBufferMB = 1024; // 1 GB
             uint level = 5; // Verbose
@@ -56,7 +64,15 @@ namespace Tracing.Tests.Common
 
             // Enable tracing.
             Enable(config);
+            */
+
+            using (var outputFile = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
+            {
+                
+            }
         }
+
+        
 
         public static void Enable(TraceConfiguration traceConfig)
         {

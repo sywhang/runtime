@@ -2,10 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.IO;
 using System.Collections.Generic;
-using Tracing.Tests.Common;
+using System.Diagnostics;
 using System.Diagnostics.Tracing;
+using System.IO;
+using Tracing.Tests.Common;
+using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.Parsers;
@@ -57,8 +59,9 @@ namespace Tracing.Tests
             {
                 using (var netPerfFile = NetPerfFile.Create(args))
                 {
+                    DiagnosticsClient client = new DiagnosticsClient(Process.GetCurrentProcess().Id);
                     Console.WriteLine("\tStart: Enable tracing.");
-                    TraceControl.Enable(GetConfig(eventSource, netPerfFile.Path));
+                    client.StartEventPipeSession(new EventPipeProvider(eventSource.Name, EventLevel.Verbose));
                     Console.WriteLine("\tEnd: Enable tracing.\n");
 
                     Console.WriteLine("\tStart: Messaging.");
