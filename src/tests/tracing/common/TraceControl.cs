@@ -5,27 +5,26 @@ using System;
 using System.Collections;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
 using Microsoft.Diagnostics.NETCore.Client;
 
 namespace Tracing.Tests.Common
 {
-    public static class TraceControl
+    public class TraceControl
     {
-        private static MethodInfo m_enableMethod;
-        private static MethodInfo m_disableMethod;
+        private Thread eventThread;
 
-        public static void EnableDefault()
+        public void EnableDefault()
         {
             EnableDefault(TimeSpan.FromMilliseconds(1));
         }
 
-        public static void EnableDefault(string outputFile)
+        public void EnableDefault(string outputFile)
         {
             EnableDefault(TimeSpan.FromMilliseconds(1), outputFile);
         }
 
-        public static void EnableDefault(TimeSpan profSampleDelay, string outputFile="default.nettrace")
+        public void EnableDefault(TimeSpan profSampleDelay, string outputFile="default.nettrace")
         {
             // Prefix the output file name with current PID to make it not collide
             outputFile = Process.GetCurrentProcess().Id.ToString() + outputFile;
@@ -68,20 +67,12 @@ namespace Tracing.Tests.Common
 
             using (var outputFile = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
             {
-                
             }
         }
 
-        
-
         public static void Enable(TraceConfiguration traceConfig)
         {
-            m_enableMethod.Invoke(
-                null,
-                new object[]
-                {
-                    traceConfig.ConfigurationObject
-                });
+            eventThread = new Thread(new ThreadStart())
         }
 
         public static void Disable()
