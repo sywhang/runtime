@@ -1483,10 +1483,7 @@ namespace System.Diagnostics.Tracing
 #if FEATURE_PERFTRACING
                 // Register the provider with EventPipe
                 var eventPipeProvider = new OverrideEventProvider(this, EventProviderType.EventPipe);
-                lock (EventListener.EventListenersLock)
-                {
-                    eventPipeProvider.Register(this);
-                }
+                eventPipeProvider.Register(this);
 #endif
                 // Add the eventSource to the global (weak) list.
                 // This also sets m_id, which is the index in the list.
@@ -2378,8 +2375,8 @@ namespace System.Diagnostics.Tracing
             }
 
             var commandArgs = new EventCommandEventArgs(command, commandArguments, this, listener, eventProviderType, perEventSourceSessionId, etwSessionId, enable, level, matchAnyKeyword);
-            lock (EventListener.EventListenersLock)
-            {
+            //lock (EventListener.EventListenersLock)
+            //{
                 if (m_completelyInited)
                 {
                     // After the first command arrive after construction, we are ready to get rid of the deferred commands
@@ -2403,7 +2400,7 @@ namespace System.Diagnostics.Tracing
                         lastCommand.nextCommand = commandArgs;
                     }
                 }
-            }
+            //}
         }
 
         /// <summary>
