@@ -97,6 +97,10 @@ def generateEvent(eventNode, providerNode, outputFile, stringTable):
                 if keywordIndex < (len(keywords) - 1):
                     evtKeywords += " | " 
             outputFile.write(evtKeywords)
+    
+    task = eventNode.getAttribute("task")
+    if task:
+        outputFile.write(", Task=Tasks." + task)
     outputFile.write(")]\n")
 
     # Get the template for the event.
@@ -298,7 +302,7 @@ def generateKeywordsClass(providerNode, outputFile):
     # Find the keywords element.
     for node in providerNode.getElementsByTagName("keywords"):
         keywordsNode = node
-        break;
+        break
 
     writeOutput(outputFile, "public class Keywords\n")
     writeOutput(outputFile, "{\n")
@@ -309,6 +313,24 @@ def generateKeywordsClass(providerNode, outputFile):
 
     decreaseTabLevel()
     writeOutput(outputFile, "}\n\n")
+
+def generateTasksClass(providerNode, outputFile):
+
+    # Find the keywords element.
+    for node in providerNode.getElementsByTagName("tasks"):
+        tasksNode = node
+        break
+
+    writeOutput(outputFile, "public class Tasks\n")
+    writeOutput(outputFile, "{\n")
+    increaseTabLevel()
+
+    for taskNode in tasksNode.getElementsByTagName("task"):
+        writeOutput(outputFile, "public const EventTask " + taskNode.getAttribute("name") + " = (EventTask)" + taskNode.getAttribute("value") + ";\n")
+
+    decreaseTabLevel()
+    writeOutput(outputFile, "}\n\n")
+
 
 def loadStringTable(manifest):
 
@@ -368,6 +390,9 @@ namespace System.Diagnostics.Tracing
 
             # Write the keywords class.
             generateKeywordsClass(providerNode, outputFile)
+
+            # Write the EventTasks class.
+            generateTasksClass(providerNode, outputFile)
 
             #### Disable enums until they are needed ####
             # Generate the enum type map.

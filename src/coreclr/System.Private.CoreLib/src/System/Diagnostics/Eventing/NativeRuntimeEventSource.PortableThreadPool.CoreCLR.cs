@@ -35,15 +35,6 @@ namespace System.Diagnostics.Tracing
             public const string WorkingThreadCount = "Count={0};\nClrInstanceID={1}";
         }
 
-        // The task definitions for the ETW manifest
-        public static class Tasks // this name and visibility is important for EventSource
-        {
-            public const EventTask ThreadPoolWorkerThread = (EventTask)16;
-            public const EventTask ThreadPoolWorkerThreadAdjustment = (EventTask)18;
-            public const EventTask ThreadPool = (EventTask)23;
-            public const EventTask ThreadPoolWorkingThreadCount = (EventTask)22;
-        }
-
         public static class Opcodes // this name and visibility is important for EventSource
         {
             public const EventOpcode IOEnqueue = (EventOpcode)13;
