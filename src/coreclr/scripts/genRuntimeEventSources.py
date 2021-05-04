@@ -417,7 +417,7 @@ def main(argv):
             raise
 
     # Generate event sources.
-    generateEventSources(manifestFullPath, intermediatesDirFullPath)
+    # generateEventSources(manifestFullPath, intermediatesDirFullPath)
     return 0
 
 if __name__ == '__main__':

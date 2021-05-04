@@ -756,6 +756,51 @@ namespace System.Diagnostics.Tracing
                 }
             }
         }
+
+        // Generate the serialized blobs that describe events for all strongly typed events (that is events that define strongly
+        // typed event methods. Dynamically defined events (that use Write) hare defined on the fly and are handled elsewhere.
+        private unsafe void DefineEventPipeEvents()
+        {
+            // If the EventSource is set to emit all events as TraceLogging events, skip this initialization.
+            // Events will be defined when they are emitted for the first time.
+            if (SelfDescribingEvents)
+            {
+                return;
+            }
+
+            Debug.Assert(m_eventData != null);
+            Debug.Assert(m_eventPipeProvider != null);
+            int cnt = m_eventData.Length;
+            for (int i = 0; i < cnt; i++)
+            {
+                uint eventID = (uint)m_eventData[i].Descriptor.EventId;
+                if (eventID == 0)
+                    continue;
+
+                byte[]? metadata = EventPipeMetadataGenerator.Instance.GenerateEventMetadata(m_eventData[i]);
+                uint metadataLength = (metadata != null) ? (uint)metadata.Length : 0;
+
+                string eventName = m_eventData[i].Name;
+                long keywords = m_eventData[i].Descriptor.Keywords;
+                uint eventVersion = m_eventData[i].Descriptor.Version;
+                uint level = m_eventData[i].Descriptor.Level;
+
+                fixed (byte *pMetadata = metadata)
+                {
+                    IntPtr eventHandle = m_eventPipeProvider.m_eventProvider.DefineEventHandle(
+                        eventID,
+                        eventName,
+                        keywords,
+                        eventVersion,
+                        level,
+                        pMetadata,
+                        metadataLength);
+
+                    Debug.Assert(eventHandle != IntPtr.Zero);
+                    m_eventData[i].EventHandle = eventHandle;
+                }
+            }
+        }
 #endif
 
         /// <summary>
@@ -1687,7 +1732,26 @@ namespace System.Diagnostics.Tracing
             return new Guid(bytes);
         }
 
+        private bool IsSourceGenerated => m_EventMetadataInitializer != null;
+
         private unsafe object? DecodeObject(int eventId, int parameterId, ref EventSource.EventData* data)
+        {
+            if (!IsSourceGenerated())
+            {
+                return DecodeObjectWithoutSourceGenerator(eventId, parameterId, data);
+            }
+            else
+            {
+                return DecodeObjectWithSourceGenerator(eventId, parameterId, data);
+            }
+        }
+        
+        private unsafe object? DecodeObjectWithSourceGenerator(int eventId, int parameterId, ref EventSource.EventData* data)
+        {
+
+        }
+
+        private unsafe object? DecodeObjectWithoutSourceGenerator(int eventId, int parameterId, ref EventSource.EventData* data)
         {
             // TODO FIX : We use reflection which in turn uses EventSource, right now we carefully avoid
             // the recursion, but can we do this in a robust way?

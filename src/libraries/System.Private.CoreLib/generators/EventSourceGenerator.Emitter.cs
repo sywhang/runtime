@@ -72,6 +72,7 @@ namespace {ec.Namespace}
                 _builder.AppendLine($@"
         private {ec.ClassName}() : base(new Guid({ec.Guid.ToString("x").Replace("{", "").Replace("}", "")}), ""{ec.SourceName}"") {{");
                 EventDataBuilder.BuildEventDescriptor(_builder, ec.Events);
+                EventPipeManifestBuilder.BuildManifest(_builder, ec.Events);
                 _builder.AppendLine("        m_EventMetadataInitializer = () => new byte[] {");
                 byte[] metadataBytes = Encoding.UTF8.GetBytes(MetadataForProvider(ec, stringTypeSymbol));
 
